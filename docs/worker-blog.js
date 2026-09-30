@@ -3,10 +3,9 @@
  *
  * POST /blog/draft      (Bearer API_KEY) — GitHub Action сайта присылает черновик; клиенту уходит сообщение с кнопками
  * POST /blog/published  (Bearer API_KEY) — уведомление клиенту, что статья вышла
- * callback_query (ap:<id> / rv:<id>)     — «Опубликовать» -> status: approved в файле статьи (коммит в GitHub),
- *                                          «Правки» -> следующее сообщение клиента пересылается менеджеру
+ * callback_query (ap:<id>)               — «Опубликовать» -> status: approved в файле статьи (коммит в GitHub)
  *
- * Секреты: GITHUB_TOKEN (PAT с правом Contents: write на репозитории сайтов), MANAGER_CHAT_ID (необязательно)
+ * Секрет: GITHUB_TOKEN (PAT с правом Contents: write на репозитории сайтов)
  */
 
 const CORS = {
@@ -48,7 +47,7 @@ export async function handleBlogDraft(request, env) {
     chat_id: client.chat_id, text, parse_mode: 'HTML', disable_web_page_preview: true,
     reply_markup: { inline_keyboard: [
       [{ text: '👁 Открыть статью', url: b.preview_url }],
-      [{ text: '✅ Опубликовать', callback_data: `ap:${id}` }, { text: '✏️ Правки', callback_data: `rv:${id}` }],
+      [{ text: '✅ Опубликовать', callback_data: `ap:${id}` }],
     ] },
   });
   if (!resp.ok) return json({ error: 'Telegram error', detail: await resp.text() }, 502);
@@ -69,45 +68,22 @@ export async function handleBlogPublished(request, env) {
 export async function handleCallback(cb, env) {
   const chatId = cb.message?.chat?.id;
   const answer = text => tg(env, 'answerCallbackQuery', { callback_query_id: cb.id, text });
-  const m = (cb.data || '').match(/^(ap|rv):([a-z0-9]+)$/);
+  const m = (cb.data || '').match(/^ap:([a-z0-9]+)$/);
   if (!m || !env.LEADS_KV) { await answer('Неизвестное действие'); return new Response('ok'); }
-  const rec = await env.LEADS_KV.get(`art:${m[2]}`, 'json');
+  const rec = await env.LEADS_KV.get(`art:${m[1]}`, 'json');
   if (!rec) { await answer('Ссылка устарела. Запросите статью заново у менеджера.'); return new Response('ok'); }
   if (String(rec.chat_id) !== String(chatId)) { await answer('Нет доступа'); return new Response('ok'); }
-
-  if (m[1] === 'rv') {
-    await env.LEADS_KV.put(`rev:${chatId}`, JSON.stringify(rec), { expirationTtl: 86400 });
-    await answer('Напишите правки одним сообщением');
-    await say(env, chatId, `✏️ Напишите одним сообщением, что поправить в статье «${rec.title}». Мы внесём изменения и пришлём её заново.`);
-    return new Response('ok');
-  }
 
   if (!env.GITHUB_TOKEN) { await answer('Сервис публикации не настроен'); return new Response('ok'); }
   const res = await githubSetStatus(env, rec.repo, rec.path, 'approved');
   if (!res.ok) {
-    await answer('Не удалось согласовать. Менеджер уже уведомлён.');
-    if (env.MANAGER_CHAT_ID) await say(env, env.MANAGER_CHAT_ID, `⚠️ Ошибка согласования ${rec.repo}/${rec.path}: ${res.error}`);
+    await answer('Не удалось опубликовать. Попробуйте ещё раз чуть позже.');
     return new Response('ok');
   }
   await answer('Согласовано ✅');
   await tg(env, 'editMessageReplyMarkup', { chat_id: chatId, message_id: cb.message.message_id, reply_markup: { inline_keyboard: [] } });
   await say(env, chatId, `✅ Статья «${rec.title}» согласована. Она выйдет на сайте по графику, о публикации пришлём сообщение.`);
   return new Response('ok');
-}
-
-// Текст после кнопки «Правки» -> менеджеру. Возвращает true, если сообщение обработано.
-export async function handleRevisionText(msg, env) {
-  const text = msg.text || '';
-  if (!text || text.startsWith('/') || !env.LEADS_KV) return false;
-  const chatId = msg.chat.id;
-  const pend = await env.LEADS_KV.get(`rev:${chatId}`, 'json');
-  if (!pend) return false;
-  await env.LEADS_KV.delete(`rev:${chatId}`);
-  if (env.MANAGER_CHAT_ID) {
-    await say(env, env.MANAGER_CHAT_ID, `✏️ <b>Правки к статье</b> «${esc(pend.title)}»\nКлиент: ${esc(pend.client || '')}\nРепозиторий: ${esc(pend.repo)}\nФайл: ${esc(pend.path)}\n\n${esc(text)}`, true);
-  }
-  await say(env, chatId, '👌 Приняли. Внесём правки и пришлём статью на повторное согласование.');
-  return true;
 }
 
 async function githubSetStatus(env, repo, filePath, status) {

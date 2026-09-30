@@ -5,6 +5,11 @@
  * POST /blog/published  (Bearer API_KEY) — уведомление клиенту, что статья вышла
  * callback_query (ap:<id>)               — «Опубликовать» -> status: approved в файле статьи (коммит в GitHub)
  *
+ * Для кабинета биржи лидов (server-to-server, Bearer API_KEY):
+ * POST /blog/approve         {repo, path}  — клиент согласовал статью
+ * POST /blog/approve-design  {repo}        — клиент согласовал оформление блога
+ * POST /seo/index            {repo}        — отправить все страницы сайта в Яндекс и Bing (IndexNow)
+ *
  * Секрет: GITHUB_TOKEN (PAT с правом Contents: write на репозитории сайтов)
  */
 
@@ -86,19 +91,79 @@ export async function handleCallback(cb, env) {
   return new Response('ok');
 }
 
+const REPO_RE = /^murzzsite\/[\w.-]+$/;
+
+export async function handleApprove(request, env) {
+  if (!authOk(request, env)) return json({ error: 'Unauthorized' }, 401);
+  const b = await safeJson(request);
+  if (!b || !REPO_RE.test(b.repo || '') || !/^articles\/[\w.-]+\.md$/.test(b.path || '')) return json({ error: 'repo (murzzsite/*) and path (articles/*.md) required' }, 400);
+  if (!env.GITHUB_TOKEN) return json({ error: 'GITHUB_TOKEN not set' }, 500);
+  const r = await githubSetStatus(env, b.repo, b.path, 'approved');
+  return r.ok ? json({ ok: true, already: !!r.already }) : json({ error: r.error }, 502);
+}
+
+export async function handleApproveDesign(request, env) {
+  if (!authOk(request, env)) return json({ error: 'Unauthorized' }, 401);
+  const b = await safeJson(request);
+  if (!b || !REPO_RE.test(b.repo || '')) return json({ error: 'repo (murzzsite/*) required' }, 400);
+  if (!env.GITHUB_TOKEN) return json({ error: 'GITHUB_TOKEN not set' }, 500);
+  const r = await githubEdit(env, b.repo, 'blog.config.json', src => {
+    const cfg = JSON.parse(src);
+    if (cfg.designApproved === true) return null;
+    cfg.designApproved = true;
+    return JSON.stringify(cfg, null, 2) + '\n';
+  }, 'blog: клиент согласовал оформление блога');
+  return r.ok ? json({ ok: true, already: !!r.already }) : json({ error: r.error }, 502);
+}
+
+// Отправка страниц сайта в поисковики через IndexNow (Яндекс, Bing). Ключ и адрес берутся из blog.config.json репозитория.
+export async function handleSeoIndex(request, env) {
+  if (!authOk(request, env)) return json({ error: 'Unauthorized' }, 401);
+  const b = await safeJson(request);
+  if (!b || !REPO_RE.test(b.repo || '')) return json({ error: 'repo (murzzsite/*) required' }, 400);
+  const raw = f => fetch(`https://raw.githubusercontent.com/${b.repo}/main/${f}`);
+  const cr = await raw('blog.config.json');
+  if (!cr.ok) return json({ error: 'blog.config.json not found (блог не установлен)' }, 404);
+  const cfg = await cr.json();
+  const site = String(cfg.siteUrl || '').replace(/\/+$/, '');
+  if (!site || !cfg.indexNowKey) return json({ error: 'siteUrl / indexNowKey missing' }, 400);
+  let urls = Array.isArray(b.urls) && b.urls.length ? b.urls : [];
+  if (!urls.length) {
+    const sm = await fetch(`${site}/sitemap.xml`);
+    if (sm.ok) urls = [...(await sm.text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
+  }
+  urls = urls.filter(u => u.startsWith(site)).slice(0, 500);
+  if (!urls.length) return json({ error: 'no urls' }, 400);
+  const payload = { host: new URL(site).host, key: cfg.indexNowKey, keyLocation: `${site}/${cfg.indexNowKey}.txt`, urlList: urls };
+  const out = {};
+  for (const ep of ['https://yandex.com/indexnow', 'https://www.bing.com/indexnow']) {
+    try { const r = await fetch(ep, { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify(payload) }); out[new URL(ep).host] = r.status; }
+    catch (e) { out[new URL(ep).host] = `error: ${e.message}`; }
+  }
+  return json({ ok: true, urls: urls.length, results: out });
+}
+
 async function githubSetStatus(env, repo, filePath, status) {
+  return githubEdit(env, repo, filePath, src => {
+    if (!/^status:/m.test(src)) throw new Error('no status field');
+    if (new RegExp('^status:\\s*' + status + '\\s*$', 'm').test(src)) return null;
+    return src.replace(/^status:.*$/m, `status: ${status}`);
+  }, `blog: клиент согласовал статью (${filePath})`);
+}
+
+// Читает файл из GitHub, применяет transform(src) -> новый текст (или null, если менять не нужно), коммитит.
+async function githubEdit(env, repo, filePath, transform, message) {
   const api = `https://api.github.com/repos/${repo}/contents/${filePath.split('/').map(encodeURIComponent).join('/')}`;
-  const headers = { Authorization: `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'lead-relay-worker', Accept: 'application/vnd.github+json' };
+  const headers = { Authorization: `Bearer ${String(env.GITHUB_TOKEN).trim()}`, 'User-Agent': 'lead-relay-worker', Accept: 'application/vnd.github+json' };
   const g = await fetch(api, { headers });
   if (!g.ok) return { ok: false, error: `GET ${g.status}` };
   const file = await g.json();
   const bytes = Uint8Array.from(atob(file.content.replace(/\n/g, '')), c => c.charCodeAt(0));
-  let src = new TextDecoder().decode(bytes);
-  if (!/^status:/m.test(src)) return { ok: false, error: 'no status field' };
-  if (new RegExp('^status:\\s*' + status + '\\s*$', 'm').test(src)) return { ok: true, already: true };
-  src = src.replace(/^status:.*$/m, `status: ${status}`);
-  const out = new TextEncoder().encode(src); let bin = '';
+  let next;
+  try { next = transform(new TextDecoder().decode(bytes)); } catch (e) { return { ok: false, error: e.message }; }
+  if (next === null) return { ok: true, already: true };
+  const out = new TextEncoder().encode(next); let bin = '';
   for (let i = 0; i < out.length; i += 0x8000) bin += String.fromCharCode(...out.subarray(i, i + 0x8000));
-  const p = await fetch(api, { method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: `blog: клиент согласовал статью (${filePath})`, content: btoa(bin), sha: file.sha }) });
+  const p = await fetch(api, { method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ message, content: btoa(bin), sha: file.sha }) });
   return p.ok ? { ok: true } : { ok: false, error: `PUT ${p.status} ${await p.text()}` };
 }

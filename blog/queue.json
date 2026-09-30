@@ -1,0 +1,37 @@
+{
+  "site": "https://murzzsite.github.io/seo-blog-demo",
+  "updated": "2026-09-30",
+  "design_approved": true,
+  "design_preview_url": null,
+  "awaiting": [
+    {
+      "slug": "kuhnya-6-metrov",
+      "path": "articles/dizayn-kuhni-v-nebolshom-prostranstve.md",
+      "title": "Кухня 6 кв. м: как уместить всё нужное и не перегрузить пространство",
+      "description": "Практические приёмы для маленькой кухни: планировка, системы хранения, свет и цвет. Что работает, а что только кажется удачным решением.",
+      "reading_time": "2 мин чтения",
+      "preview_url": "https://murzzsite.github.io/seo-blog-demo/blog/preview/152d60a640a5/kuhnya-6-metrov/"
+    }
+  ],
+  "scheduled": [],
+  "published": [
+    {
+      "slug": "cena-shkafa-na-zakaz",
+      "title": "От чего зависит цена шкафа на заказ и как сэкономить без потери качества",
+      "url": "https://murzzsite.github.io/seo-blog-demo/blog/cena-shkafa-na-zakaz/",
+      "date": "2026-09-30"
+    },
+    {
+      "slug": "dizayn-proekt-zachem-nuzhen",
+      "title": "Дизайн-проект интерьера: зачем он нужен, если ремонт «и так понятен»",
+      "url": "https://murzzsite.github.io/seo-blog-demo/blog/dizayn-proekt-zachem-nuzhen/",
+      "date": "2026-09-23"
+    },
+    {
+      "slug": "kak-vybrat-kuhnyu-na-zakaz",
+      "title": "Как выбрать кухню на заказ: 7 шагов от замеров до установки",
+      "url": "https://murzzsite.github.io/seo-blog-demo/blog/kak-vybrat-kuhnyu-na-zakaz/",
+      "date": "2026-09-16"
+    }
+  ]
+}

@@ -11,6 +11,7 @@ const REPO = process.env.GITHUB_REPOSITORY || CFG.repo;
 const SITE = CFG.siteUrl.replace(/\/+$/, '');
 
 async function worker(endpoint, payload) {
+  if (CFG.telegramNotify !== true) return false; // согласование идёт через кабинет биржи лидов, Telegram-уведомления опциональны
   if (!KEY || !CFG.workerUrl || !CFG.ref) { console.log(`notify: пропуск ${endpoint} (нет BLOG_API_KEY / workerUrl / ref)`); return false; }
   try {
     const r = await fetch(`${CFG.workerUrl}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` }, body: JSON.stringify({ ref: CFG.ref, repo: REPO, ...payload }) });

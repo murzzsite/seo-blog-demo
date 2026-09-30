@@ -35,5 +35,6 @@
     "soft": "var(--clr-text-soft)",
     "line": "var(--clr-line)"
   },
-  "noindex": true
+  "noindex": true,
+  "designApproved": true
 }

@@ -1,0 +1,39 @@
+name: SEO blog
+
+on:
+  push:
+    branches: [main]
+    paths: ['articles/**', 'blog.config.json']
+  schedule:
+    - cron: '0 6 * * *'   # каждый день 09:00 МСК — выпускает согласованные статьи по расписанию
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blog
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build blog
+        run: node .blog-kit/build.mjs
+      - name: Notify client / IndexNow
+        env:
+          BLOG_API_KEY: ${{ secrets.BLOG_API_KEY }}
+        run: node .blog-kit/notify.mjs
+      - name: Commit changes
+        run: |
+          rm -f .blog-report.json
+          git config user.name "blog-bot"
+          git config user.email "blog-bot@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "blog: автообновление"
+          git push

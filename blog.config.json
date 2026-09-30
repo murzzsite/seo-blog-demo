@@ -1,0 +1,39 @@
+{
+  "siteName": "ДОМ (демо блога)",
+  "siteUrl": "https://murzzsite.github.io/seo-blog-demo",
+  "lang": "ru",
+  "repo": "murzzsite/seo-blog-demo",
+  "ref": "",
+  "workerUrl": "https://lead-relay.leestygpt.workers.dev",
+  "blogTitle": "Блог",
+  "blogDescription": "Полезные статьи от ДОМ",
+  "homeTitle": "Полезные статьи",
+  "author": {
+    "name": "Команда ДОМ",
+    "jobTitle": "",
+    "type": "Organization"
+  },
+  "ctaTitle": "Остались вопросы?",
+  "ctaText": "Оставьте заявку — разберём вашу ситуацию и подскажем следующий шаг.",
+  "ctaButton": "Оставить заявку",
+  "ctaUrl": "/#contact",
+  "disclaimer": "",
+  "cadenceDays": 7,
+  "homeLatest": 3,
+  "staticPages": [
+    "/"
+  ],
+  "indexNowKey": "be0dd6f9d6e44821d53faf10478ab29d",
+  "previewSecret": "a1dd19e2f49d7ffa",
+  "theme": {
+    "accent": "var(--clr-accent)",
+    "accent-soft": "var(--clr-accent-soft)",
+    "bg": "var(--clr-bg)",
+    "surface": "var(--clr-surface)",
+    "ink": "var(--clr-ink)",
+    "text": "var(--clr-text)",
+    "soft": "var(--clr-text-soft)",
+    "line": "var(--clr-line)"
+  },
+  "noindex": true
+}

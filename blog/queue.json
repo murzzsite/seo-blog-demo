@@ -1,17 +1,14 @@
 {
   "site": "https://murzzsite.github.io/seo-blog-demo",
   "updated": "2026-10-01",
-  "awaiting": [
+  "awaiting": [],
+  "scheduled": [
     {
       "slug": "kuhnya-6-metrov",
-      "path": "articles/dizayn-kuhni-v-nebolshom-prostranstve.md",
       "title": "Кухня 6 кв. м: как уместить всё нужное и не перегрузить пространство",
-      "description": "Практические приёмы для маленькой кухни: планировка, системы хранения, свет и цвет. Что работает, а что только кажется удачным решением.",
-      "reading_time": "2 мин чтения",
-      "preview_url": "https://murzzsite.github.io/seo-blog-demo/blog/preview/152d60a640a5/kuhnya-6-metrov/"
+      "date": "2026-10-07"
     }
   ],
-  "scheduled": [],
   "published": [
     {
       "slug": "cena-shkafa-na-zakaz",

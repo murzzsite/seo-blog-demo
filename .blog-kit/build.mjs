@@ -10,7 +10,6 @@ const SITE = CFG.siteUrl.replace(/\/+$/, '');
 const BASE = new URL(SITE).pathname.replace(/\/+$/, ''); // '' для своего домена, '/repo' для github.io
 const CADENCE = CFG.cadenceDays ?? 7;
 const HOME_LATEST = CFG.homeLatest ?? 3;
-const GATE = CFG.designApproved === false; // оформление блога ещё не согласовано клиентом: блог скрыт, доступен только предпросмотр
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const nowMsk = new Date(Date.now() + 3 * 3600e3);
@@ -185,15 +184,15 @@ const arts = files.map(f => {
 // планирование: approved без даты -> следующий слот (раз в CADENCE дней)
 const newlyPublished = [];
 let last = arts.filter(a => ['approved', 'published'].includes(a.status) && a.date).map(a => a.date).sort().pop();
-for (const a of arts.filter(a => !GATE && a.status === 'approved' && !a.date).sort((x, y) => x.slug.localeCompare(y.slug))) {
+for (const a of arts.filter(a => a.status === 'approved' && !a.date).sort((x, y) => x.slug.localeCompare(y.slug))) {
   a.date = last ? (addDays(last, CADENCE) > TODAY ? addDays(last, CADENCE) : TODAY) : TODAY;
   last = a.date; setFm(a.file, 'date', a.date);
 }
 for (const a of arts) {
-  if (!GATE && a.status === 'approved' && a.date && a.date <= TODAY) { a.status = 'published'; setFm(a.file, 'status', 'published'); newlyPublished.push(a); }
+  if (a.status === 'approved' && a.date && a.date <= TODAY) { a.status = 'published'; setFm(a.file, 'status', 'published'); newlyPublished.push(a); }
 }
 const published = arts.filter(a => a.status === 'published' && a.date <= TODAY).sort((a, b) => b.date.localeCompare(a.date));
-const drafts = arts.filter(a => a.status === 'draft' || (GATE && a.status === 'approved'));
+const drafts = arts.filter(a => a.status === 'draft');
 
 // ---------- render ----------
 const outBlog = path.join(ROOT, 'blog');
@@ -241,7 +240,7 @@ function renderArticle(a, { preview = false } = {}) {
   const body = `
 <article class="b-article">
   <nav class="b-crumbs" aria-label="Хлебные крошки"><a href="${BASE}/">Главная</a><span>/</span><a href="${BASE}/blog/">Блог</a></nav>
-  ${preview ? '<div class="b-preview">Черновик для согласования. Эта страница не индексируется и не видна в блоге.</div>' : ''}
+  ${preview ? '<div class="b-preview">Черновик статьи. Эта страница не индексируется и не видна в блоге.</div>' : ''}
   <header class="b-head">
     <div class="b-meta">${a.fm.category ? `<span class="b-chip">${esc(a.fm.category)}</span>` : ''}<time datetime="${a.date || TODAY}">${ruDate(a.date || TODAY)}</time><span>${esc(rt)}</span></div>
     <h1>${esc(h1)}</h1>
@@ -264,7 +263,7 @@ const MARK = /<!-- BLOG:START -->[\s\S]*?<!-- BLOG:END -->/;
 let nextIndex = indexHtml;
 if (MARK.test(indexHtml)) {
   const latest = published.slice(0, HOME_LATEST);
-  const block = (latest.length && !GATE) ? `<!-- BLOG:START -->
+  const block = latest.length ? `<!-- BLOG:START -->
 <section class="b-home" id="blog">
   <div class="container">
     <div class="b-home__head"><div><p class="section-tag">${esc(CFG.blogTitle || 'Блог')}</p><h2>${esc(CFG.homeTitle || 'Полезные статьи')}</h2></div><a class="b-more" href="blog/">Все статьи</a></div>
@@ -276,7 +275,7 @@ if (MARK.test(indexHtml)) {
 }
 
 const NAVMARK = /<!-- BLOGNAV:START -->[\s\S]*?<!-- BLOGNAV:END -->/;
-if (NAVMARK.test(nextIndex)) nextIndex = nextIndex.replace(NAVMARK, () => `<!-- BLOGNAV:START -->${(published.length && !GATE) ? '<a href="blog/">Блог</a>' : ''}<!-- BLOGNAV:END -->`);
+if (NAVMARK.test(nextIndex)) nextIndex = nextIndex.replace(NAVMARK, () => `<!-- BLOGNAV:START -->${published.length ? '<a href="blog/">Блог</a>' : ''}<!-- BLOGNAV:END -->`);
 if (nextIndex !== indexHtml) fs.writeFileSync(path.join(ROOT, 'index.html'), nextIndex);
 loadChrome();
 
@@ -301,25 +300,15 @@ const listBody = `
   <header class="b-head"><h1>${esc(CFG.blogTitle || 'Блог')}</h1><p class="b-lead">${esc(CFG.blogDescription || '')}</p></header>
   ${published.length ? `<div class="b-grid">${published.map(a => cardHtml(a)).join('')}</div>` : '<p class="b-empty">Первые статьи скоро появятся.</p>'}
 </section>`;
-if (!GATE) {
-  fs.writeFileSync(path.join(outBlog, 'index.html'), page({
-    title: `${CFG.blogTitle || 'Блог'} — ${CFG.siteName}`, description: CFG.blogDescription || `Статьи ${CFG.siteName}`, canonical: `${SITE}/blog/`, body: listBody,
-    jsonld: [{ '@context': 'https://schema.org', '@type': 'Blog', name: `${CFG.blogTitle || 'Блог'} — ${CFG.siteName}`, url: `${SITE}/blog/`, blogPost: published.slice(0, 20).map(a => ({ '@type': 'BlogPosting', headline: a.fm.h1 || a.fm.title, url: `${SITE}/blog/${a.slug}/`, datePublished: a.date })) }],
-    bodyClass: 'b-page',
-  }));
-}
-const designPreviewUrl = `${SITE}/blog/preview/${previewToken('_design')}/`;
-if (GATE) {
-  const tok = previewToken('_design'); const dir = path.join(outBlog, 'preview', tok); fs.mkdirSync(dir, { recursive: true });
-  const cards = arts.filter(a => a.status === 'draft' || a.status === 'approved' || a.status === 'published').map(a => { a.date ||= TODAY; return cardHtml(a).split(`/blog/${a.slug}/`).join(`/blog/preview/${previewToken(a.slug)}/${a.slug}/`); });
-  fs.writeFileSync(path.join(dir, 'index.html'), page({ title: `Предпросмотр блога — ${CFG.siteName}`, description: 'Предпросмотр оформления блога', canonical: designPreviewUrl, robots: 'noindex, nofollow',
-    body: `<section class="b-list"><div class="b-preview">Предпросмотр оформления блога. Страница закрыта от поисковиков и видна только по этой ссылке.</div><header class="b-head"><h1>${esc(CFG.blogTitle || 'Блог')}</h1><p class="b-lead">${esc(CFG.blogDescription || '')}</p></header><div class="b-grid">${cards.join('')}</div></section>`, bodyClass: 'b-page' }));
-}
-
+fs.writeFileSync(path.join(outBlog, 'index.html'), page({
+  title: `${CFG.blogTitle || 'Блог'} — ${CFG.siteName}`, description: CFG.blogDescription || `Статьи ${CFG.siteName}`, canonical: `${SITE}/blog/`, body: listBody,
+  jsonld: [{ '@context': 'https://schema.org', '@type': 'Blog', name: `${CFG.blogTitle || 'Блог'} — ${CFG.siteName}`, url: `${SITE}/blog/`, blogPost: published.slice(0, 20).map(a => ({ '@type': 'BlogPosting', headline: a.fm.h1 || a.fm.title, url: `${SITE}/blog/${a.slug}/`, datePublished: a.date })) }],
+  bodyClass: 'b-page',
+}));
 
 // ---------- sitemap / feed / robots ----------
 const pages = (CFG.staticPages || ['/']).map(p => ({ loc: SITE + (p === '/' ? '/' : p), lastmod: TODAY, pr: p === '/' ? '1.0' : '0.5' }));
-const urls = [...pages, ...(GATE ? [] : [{ loc: `${SITE}/blog/`, lastmod: published[0]?.date || TODAY, pr: '0.8' }]), ...published.map(a => ({ loc: `${SITE}/blog/${a.slug}/`, lastmod: a.fm.updated || a.date, pr: '0.7' }))];
+const urls = [...pages, { loc: `${SITE}/blog/`, lastmod: published[0]?.date || TODAY, pr: '0.8' }, ...published.map(a => ({ loc: `${SITE}/blog/${a.slug}/`, lastmod: a.fm.updated || a.date, pr: '0.7' }))];
 fs.writeFileSync(path.join(ROOT, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => `  <url><loc>${u.loc}</loc><lastmod>${u.lastmod}</lastmod><priority>${u.pr}</priority></url>`).join('\n')}\n</urlset>\n`);
 
 const rfc = d => new Date(d + 'T09:00:00+03:00').toUTCString();
@@ -349,9 +338,9 @@ if (!fs.existsSync(robotsPath)) fs.writeFileSync(robotsPath, `User-agent: *\nAll
 fs.writeFileSync(path.join(ROOT, '.nojekyll'), '');
 
 fs.writeFileSync(path.join(outBlog, 'queue.json'), JSON.stringify({
-  site: SITE, updated: TODAY, design_approved: !GATE, design_preview_url: GATE ? designPreviewUrl : null,
+  site: SITE, updated: TODAY,
   awaiting: draftReport.map(d => ({ slug: d.slug, path: d.path, title: d.title, description: d.description, reading_time: d.reading_time, preview_url: d.preview_url })),
-  scheduled: arts.filter(a => a.status === 'approved' && a.date && a.date > TODAY && !GATE).map(a => ({ slug: a.slug, title: a.fm.h1 || a.fm.title, date: a.date })),
+  scheduled: arts.filter(a => a.status === 'approved' && a.date && a.date > TODAY).map(a => ({ slug: a.slug, title: a.fm.h1 || a.fm.title, date: a.date })),
   published: published.map(a => ({ slug: a.slug, title: a.fm.h1 || a.fm.title, url: `${SITE}/blog/${a.slug}/`, date: a.date })),
 }, null, 2));
 fs.writeFileSync(path.join(ROOT, '.blog-report.json'), JSON.stringify({

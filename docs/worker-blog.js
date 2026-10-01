@@ -1,13 +1,12 @@
 /**
- * SEO-блог: согласование статей клиентом в Telegram.
+ * SEO-блог: публикация статей по кнопке клиента (кабинет биржи / Telegram).
  *
  * POST /blog/draft      (Bearer API_KEY) — GitHub Action сайта присылает черновик; клиенту уходит сообщение с кнопками
  * POST /blog/published  (Bearer API_KEY) — уведомление клиенту, что статья вышла
  * callback_query (ap:<id>)               — «Опубликовать» -> status: approved в файле статьи (коммит в GitHub)
  *
  * Для кабинета биржи лидов (server-to-server, Bearer API_KEY):
- * POST /blog/approve         {repo, path}  — клиент согласовал статью
- * POST /blog/approve-design  {repo}        — клиент согласовал оформление блога
+ * POST /blog/approve         {repo, path}  — клиент нажал «Опубликовать»
  * POST /seo/index            {repo}        — отправить все страницы сайта в Яндекс и Bing (IndexNow)
  *
  * Секрет: GITHUB_TOKEN (PAT с правом Contents: write на репозитории сайтов)
@@ -40,7 +39,7 @@ export async function handleBlogDraft(request, env) {
   await env.LEADS_KV.put(`art:${id}`, JSON.stringify({ ref: b.ref, repo: b.repo, path: b.path, slug: b.slug, title: b.title, chat_id: client.chat_id, client: client.name }), { expirationTtl: 60 * 86400 });
 
   const text = [
-    '📝 <b>Новая статья на согласование</b>',
+    '📝 <b>Новая статья готова к публикации</b>',
     '',
     `<b>${esc(b.title || b.slug)}</b>`,
     b.description ? esc(b.description) : '',
@@ -85,9 +84,9 @@ export async function handleCallback(cb, env) {
     await answer('Не удалось опубликовать. Попробуйте ещё раз чуть позже.');
     return new Response('ok');
   }
-  await answer('Согласовано ✅');
+  await answer('Готово ✅');
   await tg(env, 'editMessageReplyMarkup', { chat_id: chatId, message_id: cb.message.message_id, reply_markup: { inline_keyboard: [] } });
-  await say(env, chatId, `✅ Статья «${rec.title}» согласована. Она выйдет на сайте по графику, о публикации пришлём сообщение.`);
+  await say(env, chatId, `✅ Статья «${rec.title}» принята к публикации. Она выйдет на сайте по графику, о публикации пришлём сообщение.`);
   return new Response('ok');
 }
 
@@ -99,20 +98,6 @@ export async function handleApprove(request, env) {
   if (!b || !REPO_RE.test(b.repo || '') || !/^articles\/[\w.-]+\.md$/.test(b.path || '')) return json({ error: 'repo (murzzsite/*) and path (articles/*.md) required' }, 400);
   if (!env.GITHUB_TOKEN) return json({ error: 'GITHUB_TOKEN not set' }, 500);
   const r = await githubSetStatus(env, b.repo, b.path, 'approved');
-  return r.ok ? json({ ok: true, already: !!r.already }) : json({ error: r.error }, 502);
-}
-
-export async function handleApproveDesign(request, env) {
-  if (!authOk(request, env)) return json({ error: 'Unauthorized' }, 401);
-  const b = await safeJson(request);
-  if (!b || !REPO_RE.test(b.repo || '')) return json({ error: 'repo (murzzsite/*) required' }, 400);
-  if (!env.GITHUB_TOKEN) return json({ error: 'GITHUB_TOKEN not set' }, 500);
-  const r = await githubEdit(env, b.repo, 'blog.config.json', src => {
-    const cfg = JSON.parse(src);
-    if (cfg.designApproved === true) return null;
-    cfg.designApproved = true;
-    return JSON.stringify(cfg, null, 2) + '\n';
-  }, 'blog: клиент согласовал оформление блога');
   return r.ok ? json({ ok: true, already: !!r.already }) : json({ error: r.error }, 502);
 }
 
@@ -148,7 +133,7 @@ async function githubSetStatus(env, repo, filePath, status) {
     if (!/^status:/m.test(src)) throw new Error('no status field');
     if (new RegExp('^status:\\s*' + status + '\\s*$', 'm').test(src)) return null;
     return src.replace(/^status:.*$/m, `status: ${status}`);
-  }, `blog: клиент согласовал статью (${filePath})`);
+  }, `blog: клиент нажал «Опубликовать» (${filePath})`);
 }
 
 // Читает файл из GitHub, применяет transform(src) -> новый текст (или null, если менять не нужно), коммитит.

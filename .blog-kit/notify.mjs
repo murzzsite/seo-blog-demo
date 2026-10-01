@@ -1,4 +1,4 @@
-// После build.mjs: шлёт клиенту черновики на согласование, сообщает о публикации, пингует IndexNow.
+// После build.mjs: шлёт клиенту статьи, готовые к публикации, сообщает о публикации, пингует IndexNow.
 // Env: BLOG_API_KEY (секрет репозитория), GITHUB_REPOSITORY (задаёт Actions)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,7 +11,7 @@ const REPO = process.env.GITHUB_REPOSITORY || CFG.repo;
 const SITE = CFG.siteUrl.replace(/\/+$/, '');
 
 async function worker(endpoint, payload) {
-  if (CFG.telegramNotify !== true) return false; // согласование идёт через кабинет биржи лидов, Telegram-уведомления опциональны
+  if (CFG.telegramNotify !== true) return false; // публикация идёт через кабинет биржи лидов, Telegram-уведомления опциональны
   if (!KEY || !CFG.workerUrl || !CFG.ref) { console.log(`notify: пропуск ${endpoint} (нет BLOG_API_KEY / workerUrl / ref)`); return false; }
   try {
     const r = await fetch(`${CFG.workerUrl}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` }, body: JSON.stringify({ ref: CFG.ref, repo: REPO, ...payload }) });

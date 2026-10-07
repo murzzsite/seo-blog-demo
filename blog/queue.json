@@ -1,15 +1,15 @@
 {
   "site": "https://murzzsite.github.io/seo-blog-demo",
-  "updated": "2026-10-06",
+  "updated": "2026-10-07",
   "awaiting": [],
-  "scheduled": [
+  "scheduled": [],
+  "published": [
     {
       "slug": "kuhnya-6-metrov",
       "title": "Кухня 6 кв. м: как уместить всё нужное и не перегрузить пространство",
+      "url": "https://murzzsite.github.io/seo-blog-demo/blog/kuhnya-6-metrov/",
       "date": "2026-10-07"
-    }
-  ],
-  "published": [
+    },
     {
       "slug": "cena-shkafa-na-zakaz",
       "title": "От чего зависит цена шкафа на заказ и как сэкономить без потери качества",
